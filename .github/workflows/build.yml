@@ -25,7 +25,8 @@ jobs:
           ./scripts/feeds install -a
       - name: 拉取 OpenClash
         working-directory: package
-        run: git clone https://github.com/vernesong/OpenClash.git
+        run: |
+          [ ! -d OpenClash ] && git clone https://github.com/vernesong/OpenClash.git
       - name: 加载配置
         run: |
           if [ -f defconfig/mt7981-360-t7-512m.config ];then
@@ -44,7 +45,7 @@ jobs:
       - name: make defconfig
         run: make defconfig
       - name: 编译固件
-        run: make -j$(nproc) V=s
+        run: make -j1 V=s
       - name: 收集固件
         run: |
           mkdir -p artifact
