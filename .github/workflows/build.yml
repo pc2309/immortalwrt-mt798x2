@@ -1,0 +1,57 @@
+name: Build 360T7 ImmortalWrt
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 拉取仓库源码
+        uses: actions/checkout@v4
+      - name: 安装编译依赖
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential flex bison gawk libssl-dev libelf-dev uboot-tools git
+      - name: 缓存编译资源
+        uses: actions/cache@v4
+        with:
+          path: |
+            ./dl
+            ./build_dir
+          key: ${{ runner.os }}-mt798x-${{ github.sha }}
+      - name: 更新 feeds
+        run: |
+          echo "src-git istore https://github.com/linkease/istore.git;main" >> feeds.conf.default
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+      - name: 拉取 OpenClash
+        working-directory: package
+        run: git clone https://github.com/vernesong/OpenClash.git
+      - name: 加载配置
+        run: |
+          if [ -f defconfig/mt7981-360-t7-512m.config ];then
+            cp defconfig/mt7981-360-t7-512m.config .config
+          else
+            cp defconfig/mt7981-360-t7.config .config
+          fi
+      - name: 追加插件开关
+        run: |
+          echo "CONFIG_PACKAGE_luci-app-istorex=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-openclash=y" >> .config
+          echo "CONFIG_PACKAGE_luci-theme-argon=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-ipt-tproxy=y" >> .config
+          echo "CONFIG_PACKAGE_bbr=y" >> .config
+          echo "CONFIG_PACKAGE_zram-swap=y" >> .config
+      - name: make defconfig
+        run: make defconfig
+      - name: 编译固件
+        run: make -j$(nproc) V=s
+      - name: 收集固件
+        run: |
+          mkdir -p artifact
+          find ./bin/targets -name "*360-t7*factory.bin" -o -name "*360-t7*sysupgrade.bin" -exec cp {} artifact/ \;
+      - name: 上传固件
+        uses: actions/upload-artifact@v4
+        with:
+          name: 360T7-firmware
+          path: artifact
+          retention-days: 7
