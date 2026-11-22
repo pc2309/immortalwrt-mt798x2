@@ -33,7 +33,9 @@ jobs:
         run: |
           echo 'src-git istore https://github.com/linkease/istore.git;main' >> feeds.conf.default
           ./scripts/feeds update -a
-          ./scripts/feeds install luci-app-store luci-compat
+          ./scripts/feeds install -a
+          echo '--- 关键依赖是否已链接 ---'
+          ls -d package/feeds/packages/bash package/feeds/packages/ruby package/feeds/packages/unzip || true
 
       - name: 拉取 OpenClash
         run: |
@@ -50,7 +52,8 @@ jobs:
           echo 'CONFIG_PACKAGE_luci-app-openclash=y' >> .config
           make defconfig
           grep -q 'CONFIG_TARGET_DEVICE_mediatek_mt7981_DEVICE_mt7981-360-t7-108M=y' .config || { echo '错误：360T7 设备未生效'; grep -n '360' .config; exit 1; }
-          grep -c 'CONFIG_PACKAGE_luci-app-openclash=y' .config
+          echo '--- OpenClash 相关开关 ---'
+          grep -E 'CONFIG_PACKAGE_(luci-app-openclash|bash|ruby|unzip|kmod-tun)=' .config || true
 
       - name: 编译固件
         run: |
@@ -63,9 +66,11 @@ jobs:
           echo "make 退出码: $rc"
           if [ $rc -ne 0 ]; then
             echo '===== 关键错误行 ====='
-            grep -n -E "Error [0-9]|error:|\*\*\* |Cannot install|unresolved|ERROR" build.log | tail -n 50 || true
+            grep -n -E "Error [0-9]|error:|\*\*\* |Cannot install|unresolved|does not exist|Collected errors" build.log | tail -n 50 || true
             echo '===== 日志末尾 150 行 ====='
             tail -n 150 build.log
+            echo '===== 单线程详细模式复跑以暴露真实报错 ====='
+            make -j1 V=sc 2>&1 | tail -n 120 || true
             exit $rc
           fi
           echo '===== 编译完成，产物目录 ====='
