@@ -56,13 +56,32 @@ jobs:
         run: |
           export CCACHE_DIR=$PWD/.ccache
           export CCACHE_MAXSIZE=2G
-          make -j$(nproc) 2>&1 | tee build.log | tail -n 80 || { echo '=== 编译失败，日志尾部 ==='; tail -n 400 build.log; exit 1; }
+          set +e
+          make -j$(nproc) > build.log 2>&1
+          rc=$?
+          set -e
+          echo "make 退出码: $rc"
+          if [ $rc -ne 0 ]; then
+            echo '===== 关键错误行 ====='
+            grep -n -E "Error [0-9]|error:|\*\*\* |Cannot install|unresolved|ERROR" build.log | tail -n 50 || true
+            echo '===== 日志末尾 150 行 ====='
+            tail -n 150 build.log
+            exit $rc
+          fi
+          echo '===== 编译完成，产物目录 ====='
+          ls -lh bin/targets/mediatek/mt7981/ || true
 
       - name: 收集固件
         run: |
           mkdir -p artifact
           find bin/targets -type f \( -name '*.bin' -o -name '*.itb' -o -name '*.tar.gz' \) -exec cp -v {} artifact/ \;
-          ls -lh artifact
+          echo "产物数量: $(ls -1 artifact 2>/dev/null | wc -l)"
+          ls -lh artifact || true
+          if [ -z "$(ls -A artifact)" ]; then
+            echo '===== 没有找到任何固件产物，日志末尾 150 行 ====='
+            tail -n 150 build.log
+            exit 1
+          fi
 
       - name: 上传固件
         if: always()
@@ -73,8 +92,8 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-      - name: 上传失败日志
-        if: failure()
+      - name: 上传构建日志
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
